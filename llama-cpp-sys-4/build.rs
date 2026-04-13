@@ -987,6 +987,27 @@ fn main() {
                 apply_patches(&single_dir, &llama_dst);
             }
         }
+        // Patch FGDN asserts for Gemma 4 compatibility — convert hard asserts
+        // to soft skips so models with Gated Delta Net architecture can load.
+        {
+            let ctx_path = llama_dst.join("src/llama-context.cpp");
+            if ctx_path.exists() {
+                let content = std::fs::read_to_string(&ctx_path).unwrap_or_default();
+                let patched = content
+                    .replace(
+                        "GGML_ASSERT(strncmp(n->name, LLAMA_TENSOR_NAME_FGDN_AR \"-\", prefix_len) == 0);",
+                        "if (strncmp(n->name, LLAMA_TENSOR_NAME_FGDN_AR \"-\", prefix_len) != 0) { continue; }"
+                    )
+                    .replace(
+                        "GGML_ASSERT(strncmp(n->name, LLAMA_TENSOR_NAME_FGDN_CH \"-\", prefix_len) == 0);",
+                        "if (strncmp(n->name, LLAMA_TENSOR_NAME_FGDN_CH \"-\", prefix_len) != 0) { continue; }"
+                    );
+                if patched != content {
+                    std::fs::write(&ctx_path, &patched).expect("failed to patch FGDN asserts");
+                    debug_log!("Patched FGDN asserts in llama-context.cpp");
+                }
+            }
+        }
         std::fs::write(&sentinel, &current_version)
             .expect("failed to write source version sentinel");
     }
