@@ -1679,13 +1679,18 @@ fn main() {
     // Build tools (including the mtmd library) only when the mtmd feature is
     // requested.  Common is also required because the CMakeLists gate for
     // tools is `if (LLAMA_BUILD_COMMON AND LLAMA_BUILD_TOOLS)`.
-    if cfg!(feature = "mtmd") {
-        config.define("LLAMA_BUILD_TOOLS", "ON");
-        config.define("LLAMA_BUILD_COMMON", "ON");
-    } else {
-        config.define("LLAMA_BUILD_TOOLS", "OFF");
-        config.define("LLAMA_BUILD_COMMON", "OFF");
-    }
+    // COMMON must ALWAYS be built: the MTP shim (compiled unconditionally) plus
+    // llama-cpp-4's params_fit / memory_breakdown_print reference common_*
+    // symbols (common_speculative_*, common_fit_params,
+    // common_memory_breakdown_print). Upstream gates COMMON behind mtmd, which
+    // leaves a non-mtmd build with unresolved externals at link time
+    // (libllama_cpp_sys_4 mtp_shim.o + llama_cpp_4 → LNK2019). Build COMMON
+    // unconditionally; keep TOOLS gated on mtmd.
+    config.define("LLAMA_BUILD_COMMON", "ON");
+    config.define(
+        "LLAMA_BUILD_TOOLS",
+        if cfg!(feature = "mtmd") { "ON" } else { "OFF" },
+    );
 
     config.define(
         "BUILD_SHARED_LIBS",
